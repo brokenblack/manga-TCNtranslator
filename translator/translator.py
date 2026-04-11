@@ -10,6 +10,14 @@ import sys
 import os
 from pathlib import Path
 
+# ── GUI subsystem stdout/stderr 防護 ─────────────────────────
+# PyInstaller --windowed 模式下 sys.stdout/stderr 會是 None，
+# 任何 print() 都會拋 AttributeError 讓 GUI 執行緒炸掉。
+if sys.stdout is None:
+    sys.stdout = open(os.devnull, "w")
+if sys.stderr is None:
+    sys.stderr = open(os.devnull, "w")
+
 # ── GPU 自動偵測 ──────────────────────────────────────────────
 # NVIDIA 用戶能用 CUDA；AMD 用戶沒 CUDA 支援，改用 CPU
 try:
@@ -66,30 +74,49 @@ DEFAULT_CONFIG = {
     "anki_fields": {
         "original": "Front", "reading": "Reading",
         "translation": "Back", "audio": "Audio",
-        "pitch_accent": "VocabPitchPattern",
     },
     "anki_cloze_deck": "遊戲翻譯（挖空）", "anki_cloze_model": "Cloze",
     "anki_cloze_fields": {
-        "text": "Text", "extra": "Extra", "audio": "Audio", "sentence": "",
-        "pitch_accent": "VocabPitchPattern",
+        "text": "Text", "extra": "Extra", "reading": "Reading",
+        "audio": "Audio", "sentence": "",
     },
     "forvo_api_key": "", "audio_enabled": True,
     "font_size": 14,
     "global_hotkey": "ctrl+alt+q",
     "background_mode": True,
     "close_ask": True,
-    "anki_trigger_pitch": True,
+    "anki_open_editor": True,
 }
 
 def load_config():
+    cfg = DEFAULT_CONFIG.copy()
     if CONFIG_PATH.exists():
         with open(CONFIG_PATH, encoding="utf-8") as f:
-            cfg = DEFAULT_CONFIG.copy(); cfg.update(json.load(f)); return cfg
-    return DEFAULT_CONFIG.copy()
+            cfg.update(json.load(f))
+    # 敏感金鑰優先從環境變數讀取（檔案值作 fallback）
+    for cfg_key, env_key in (
+        ("claude_api_key", "CLAUDE_API_KEY"),
+        ("gemini_api_key", "GEMINI_API_KEY"),
+        ("groq_api_key",   "GROQ_API_KEY"),
+        ("forvo_api_key",  "FORVO_API_KEY"),
+    ):
+        if os.environ.get(env_key):
+            cfg[cfg_key] = os.environ[env_key]
+    return cfg
 
 def save_config(cfg):
+    # 若金鑰由環境變數提供，則不回寫到磁碟（避免洩漏）
+    to_save = cfg.copy()
+    for cfg_key, env_key in (
+        ("claude_api_key", "CLAUDE_API_KEY"),
+        ("gemini_api_key", "GEMINI_API_KEY"),
+        ("groq_api_key",   "GROQ_API_KEY"),
+        ("forvo_api_key",  "FORVO_API_KEY"),
+    ):
+        if os.environ.get(env_key):
+            to_save[cfg_key] = ""
     with open(CONFIG_PATH, "w", encoding="utf-8") as f:
-        json.dump(cfg, f, ensure_ascii=False, indent=2)
+        json.dump(to_save, f, ensure_ascii=False, indent=2)
 
 
 # ── 語言偵測 ────────────────────────────────────────────────
@@ -399,7 +426,7 @@ class ClozeDialog(tk.Toplevel):
         sb.pack(fill="x", pady=(2,4))
 
         # 翻譯（背景色提示）
-        ttk.Label(f, text="翻譯（Extra）：", font=("",9,"bold")).pack(anchor="w")
+        ttk.Label(f, text="翻譯（背面提示）：", font=("",9,"bold")).pack(anchor="w")
         tb = tk.Text(f, height=2, wrap="word", font=("Microsoft JhengHei",11),
                      relief="flat", bg="#f0f8ff", state="normal")
         tb.insert("1.0", extract_clean_translation(self.translation)); tb.configure(state="disabled")
@@ -627,37 +654,40 @@ class ClozeDialog(tk.Toplevel):
         self.status.set("⏳ 取得 Forvo 音訊...")
 
         def _w():
-            from anki_helper import get_forvo_tag, add_cloze_note
-            audio_tag = ""
-            key  = self.cfg.get("forvo_api_key","").strip()
-            lang = self.cfg.get("ocr_language","ja")
-            if key:
-                try:
-                    search    = reading if reading else word
-                    audio_tag = get_forvo_tag(search, lang, key, self.cfg["anki_url"])
-                    self.after(0, lambda: self.status.set("✅ 音訊取得"))
-                except Exception as e:
-                    self.after(0, lambda: self.status.set(f"⚠️ Forvo：{e}，繼續加入"))
-            else:
-                self.after(0, lambda: self.status.set("（未設定 Forvo Key，無音訊）"))
+            try:
+                from anki_helper import get_forvo_tag, add_cloze_note
+                audio_tag = ""
+                key  = self.cfg.get("forvo_api_key","").strip()
+                lang = self.cfg.get("ocr_language","ja")
+                if key:
+                    try:
+                        search    = reading if reading else word
+                        audio_tag = get_forvo_tag(search, lang, key, self.cfg["anki_url"])
+                        self.after(0, lambda: self.status.set("✅ 音訊取得"))
+                    except Exception as e:
+                        self.after(0, lambda: self.status.set(f"⚠️ Forvo：{e}，繼續加入"))
+                else:
+                    self.after(0, lambda: self.status.set("（未設定 Forvo Key，無音訊）"))
 
-            # Cloze Extra 欄位只放純譯文，不放老師解說
-            clean_trans = extract_clean_translation(self.translation)
+                # Cloze Extra 欄位只放純譯文，不放老師解說
+                clean_trans = extract_clean_translation(self.translation)
 
-            ok, msg = add_cloze_note(
-                sentence     = self.sentence,
-                translation  = clean_trans,
-                word         = word,
-                word_reading = reading,
-                audio_tag    = audio_tag,
-                cfg          = self.cfg,
-                word_hint    = word_hint,
-            )
-            final = f"{'✅' if ok else '❌'} {msg}"
-            self.after(0, lambda: self.status.set(final))
-            if ok:
-                self.after(1500, self.destroy)
-                self.after(0, lambda: self.on_done(final))
+                ok, msg = add_cloze_note(
+                    sentence     = self.sentence,
+                    translation  = clean_trans,
+                    word         = word,
+                    word_reading = reading,
+                    audio_tag    = audio_tag,
+                    cfg          = self.cfg,
+                    word_hint    = word_hint,
+                )
+                final = f"{'✅' if ok else '❌'} {msg}"
+                self.after(0, lambda: self.status.set(final))
+                if ok:
+                    self.after(1500, self.destroy)
+                    self.after(0, lambda: self.on_done(final))
+            except Exception as e:
+                self.after(0, lambda: self.status.set(f"❌ {e}"))
 
         threading.Thread(target=_w, daemon=True).start()
 
@@ -1160,8 +1190,7 @@ class MainApp(tk.Tk):
 
         # 批量加入 Anki
         bulk_bar=ttk.Frame(right); bulk_bar.pack(fill="x",padx=6,pady=(0,4))
-        ttk.Button(bulk_bar,text="🃏 批量句子卡",command=self._bulk_add_sentence).pack(side="left")
-        ttk.Button(bulk_bar,text="✂️ 批量挖空卡",command=self._bulk_add_cloze).pack(side="left",padx=4)
+        ttk.Button(bulk_bar,text="🃏 批量句子卡",command=self._bulk_add_sentence).pack(side="left",padx=4)
         self.hist_anki_status=tk.StringVar(value="")
         ttk.Label(bulk_bar,textvariable=self.hist_anki_status,foreground="green",wraplength=160).pack(side="left")
 
@@ -1559,31 +1588,10 @@ class MainApp(tk.Tk):
                     ex_ja,_=extract_example_sentence(trans)
                     front=ex_ja if ex_ja else orig
                     reading=extract_reading(front) if self.cfg.get("ocr_language","ja")=="ja" else ""
-                    ok,_=add_sentence_note(orig,front,extract_clean_translation(trans),reading,"",self.cfg)
-                    if ok: ok_cnt+=1
-                    else: fail_cnt+=1
-                except: fail_cnt+=1
-            self.after(0,lambda: self.hist_anki_status.set(
-                f"✅ {ok_cnt} 筆"+(f"，{fail_cnt} 失敗" if fail_cnt else "")))
-        threading.Thread(target=_w,daemon=True).start()
-
-    def _bulk_add_cloze(self):
-        sel=self.hist_list.curselection()
-        if not sel: self.hist_anki_status.set("⚠️ 請先選取項目"); return
-        entries=[self._hist_entries[i] for i in sel]
-        self.hist_anki_status.set(f"⏳ 加入 {len(entries)} 筆...")
-        def _w():
-            ok_cnt=fail_cnt=0
-            for e in entries:
-                orig=e.get("original","").strip(); trans=e.get("translation","").strip()
-                if not orig or not trans: fail_cnt+=1; continue
-                try:
-                    tokens=tokenize_sentence(orig)
-                    word=reading=""
-                    for surf,hira in tokens:
-                        if hira and hira!=surf: word,reading=surf,hira; break
-                    if not word and tokens: word,reading=tokens[0][0],tokens[0][1]
-                    ok,_=add_cloze_note(orig,extract_clean_translation(trans),word,reading,"",self.cfg)
+                    # 卡背使用完整 AI 回覆（老師解說：含譯文、例句、重點單字、用詞備注）
+                    # Anki 欄位是 HTML，換行需轉成 <br> 才會正常顯示
+                    trans_html = trans.replace("\n", "<br>")
+                    ok,_=add_sentence_note(orig,front,trans_html,reading,"",self.cfg)
                     if ok: ok_cnt+=1
                     else: fail_cnt+=1
                 except: fail_cnt+=1

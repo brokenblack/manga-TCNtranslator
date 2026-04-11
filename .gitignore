@@ -18,6 +18,7 @@ env/
 .env
 .env.*
 config.json
+config_json/
 
 # OCR 模型快取（體積過大）
 .manga_ocr/

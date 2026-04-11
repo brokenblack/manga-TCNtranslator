@@ -18,15 +18,14 @@ SENTENCE_ROLES = [
     ("reading",      "讀音（平假名）",      "自動抽取讀音，供 Forvo addon 消歧"),
     ("translation",  "老師解說（背面）",    "含譯文、重點單字、用詞備注的完整解說"),
     ("audio",        "音訊",               "[sound:xxx.mp3]（Forvo 音檔）"),
-    ("pitch_accent", "Pitch Accent",      "AJT addon 自動填入，留空即可"),
 ]
 
 CLOZE_ROLES = [
-    ("text",         "挖空文字（Text）",   "{{c1::單字::讀音}} 格式，例：今日は{{c1::天気::てんき}}がいい"),
-    ("extra",        "提示（Extra）",      "繁體中文翻譯（卡片背面提示）"),
+    ("text",         "卡面（含挖空標記）", "含 {{c1::...}} 的文字。Cloze Anything 請對應 ExpressionCloze1"),
+    ("extra",        "翻譯 / 背面",       "繁體中文翻譯（卡片背面提示）"),
+    ("reading",      "單字讀音（平假名）", "挖空單字的讀音（由製卡頁面選取的詞元，可手動修改）"),
     ("audio",        "音訊",              "[sound:xxx.mp3]（單字 Forvo 音檔）"),
-    ("sentence",     "原句（選用）",       "完整日文例句（可放在 Extra 或獨立欄位）"),
-    ("pitch_accent", "Pitch Accent",      "AJT addon 自動填入，留空即可"),
+    ("sentence",     "原句（完整）",       "完整例句（無挖空標記）。Cloze Anything 請對應 Expression"),
 ]
 
 
@@ -66,7 +65,6 @@ class AnkiSettingsWindow(tk.Toplevel):
         ttk.Label(f, text=(
             "需要安裝的 Anki addon：\n"
             "  • AnkiConnect        代碼：2055492159\n"
-            "  • AJT Pitch Accent   代碼：148002038\n"
             "  • Forvo Downloader   代碼：1784714388（選用，可手動補音）"
         ), foreground="gray30", justify="left").grid(
             row=0, column=0, columnspan=3, sticky="w", pady=(0, 10))
@@ -158,7 +156,6 @@ class AnkiSettingsWindow(tk.Toplevel):
             "reading":     "Reading",
             "translation": "Back",
             "audio":       "Audio",
-            "pitch_accent":"VocabPitchPattern",
         }
         for i, (role, label, desc) in enumerate(SENTENCE_ROLES, start=5):
             ttk.Label(f, text=label).grid(row=i, column=0, sticky="w", padx=8, pady=3)
@@ -177,14 +174,14 @@ class AnkiSettingsWindow(tk.Toplevel):
 
         ttk.Separator(f).grid(row=len(SENTENCE_ROLES)+6, column=0,
                               columnspan=3, sticky="ew", pady=4)
-        self.trigger_pitch_var = tk.BooleanVar(
-            value=self.cfg.get("anki_trigger_pitch", True))
+        self.open_editor_var = tk.BooleanVar(
+            value=self.cfg.get("anki_open_editor", True))
         ttk.Checkbutton(
-            f, text="建立卡片後自動觸發 AJT Pitch Accent（會短暫開啟編輯視窗）",
-            variable=self.trigger_pitch_var).grid(
+            f, text="建立卡片後自動開啟 Anki 編輯視窗",
+            variable=self.open_editor_var).grid(
             row=len(SENTENCE_ROLES)+7, column=0, columnspan=3,
             sticky="w", padx=8, pady=4)
-        ttk.Label(f, text="AJT 只在編輯器載入時才填 pitch，需藉由開啟編輯視窗觸發",
+        ttk.Label(f, text="方便確認欄位內容、手動修改或觸發 addon（如 AJT Pitch Accent）",
                   foreground="gray50", wraplength=480).grid(
             row=len(SENTENCE_ROLES)+8, column=0, columnspan=3,
             sticky="w", padx=26, pady=(0, 4))
@@ -211,7 +208,8 @@ class AnkiSettingsWindow(tk.Toplevel):
 
         ttk.Label(f, text=(
             "挖空卡格式：{{c1::單字::讀音}} 嵌入例句\n"
-            "筆記類型請選 Anki 內建的「Cloze」或相容類型。"
+            "筆記類型可選 Anki 內建「Cloze」或「Cloze Anything」等相容類型。\n"
+            "⚠ Cloze Anything 用戶：挖空標記請對應 ExpressionCloze1，原句對應 Expression"
         ), foreground="gray40", justify="left").grid(
             row=0, column=0, columnspan=3, sticky="w", pady=(0, 8))
 
@@ -242,8 +240,8 @@ class AnkiSettingsWindow(tk.Toplevel):
         self.cloze_field_cbs:  dict[str, ttk.Combobox] = {}
         _cloze_defaults = {
             "text": "Text", "extra": "Extra",
+            "reading": "Reading",
             "audio": "Audio", "sentence": "",
-            "pitch_accent": "VocabPitchPattern",
         }
         for i, (role, label, desc) in enumerate(CLOZE_ROLES, start=6):
             ttk.Label(f, text=label).grid(row=i, column=0, sticky="w", padx=8, pady=3)
@@ -329,8 +327,9 @@ class AnkiSettingsWindow(tk.Toplevel):
             try:
                 import tempfile, os
                 data = fetch_forvo_audio(word, "ja", key)
-                tmp  = tempfile.mktemp(suffix=".mp3")
-                with open(tmp, "wb") as fp: fp.write(data)
+                with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as fp:
+                    fp.write(data)
+                    tmp = fp.name
                 os.startfile(tmp)
                 self.after(0, lambda: self.forvo_status.set(f"✅「{word}」播放中"))
             except Exception as e:
@@ -359,8 +358,8 @@ class AnkiSettingsWindow(tk.Toplevel):
             "anki_cloze_fields": _fm(self.cloze_field_vars),
             # Forvo
             "forvo_api_key":     self.forvo_key.get().strip(),
-            # AJT Pitch 觸發
-            "anki_trigger_pitch": self.trigger_pitch_var.get(),
+            # 建立卡片後開啟編輯視窗
+            "anki_open_editor": self.open_editor_var.get(),
         })
         self.on_save(self.cfg)
         self.destroy()

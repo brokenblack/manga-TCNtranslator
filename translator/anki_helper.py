@@ -119,7 +119,7 @@ def test_forvo_api(api_key: str) -> str:
 def get_forvo_tag(search_word: str, lang: str, api_key: str, anki_url: str) -> str:
     """取得 Forvo 音訊並存入 Anki，回傳 [sound:xxx.mp3]"""
     audio = fetch_forvo_audio(search_word, lang, api_key)
-    h     = hashlib.md5(search_word.encode()).hexdigest()[:8]
+    h     = hashlib.sha256(search_word.encode()).hexdigest()[:8]
     fname = f"forvo_{h}.mp3"
     anki_req("storeMediaFile", {
         "filename": fname,
@@ -139,7 +139,6 @@ def add_sentence_note(orig: str, example: str, trans: str, reading: str,
       reading      → 平假名讀音
       translation  → 老師完整解說（卡片背面）
       audio        → [sound:xxx.mp3]
-      pitch_accent → 留空（AJT 自動填）
     回傳 (ok: bool, msg: str)
     """
     return _add_note(
@@ -155,7 +154,7 @@ def add_sentence_note(orig: str, example: str, trans: str, reading: str,
             "translation": trans,
             "audio":       audio_tag,
         },
-        trigger_pitch = cfg.get("anki_trigger_pitch", True),
+        open_editor = cfg.get("anki_open_editor", True),
     )
 
 
@@ -190,9 +189,10 @@ def add_cloze_note(sentence: str, translation: str,
     使用 cfg["anki_cloze_*"] 的欄位設定（與一般卡獨立）。
 
     Cloze 筆記類型欄位（預設）：
-      Text   → 含 {{c1::word::hint}} 的日文句子（hint 優先用簡要翻譯）
-      Extra  → 繁體中文翻譯（背面提示）
-      Audio  → [sound:xxx.mp3]
+      Text    → 含 {{c1::word::hint}} 的日文句子（hint 優先用簡要翻譯）
+      Extra   → 繁體中文翻譯（背面提示）
+      Reading → 挖空單字的讀音（平假名）
+      Audio   → [sound:xxx.mp3]
     """
     hint = word_hint if word_hint else word_reading
     cloze_text = build_cloze_text(sentence, word, hint)
@@ -211,17 +211,18 @@ def add_cloze_note(sentence: str, translation: str,
         data  = {
             "text":        cloze_text,
             "extra":       translation,
+            "reading":     word_reading,       # 挖空單字的讀音
             "audio":       audio_tag,
-            "sentence":    sentence,          # 原句（Extra 也可放）
+            "sentence":    sentence,           # 原句（Extra 也可放）
         },
-        trigger_pitch = cfg.get("anki_trigger_pitch", True),
+        open_editor = cfg.get("anki_open_editor", True),
     )
 
 
 # ── 共用新增邏輯 ─────────────────────────────────────────────
 def _add_note(deck: str, model: str, fm: dict,
               tags: list, url: str, data: dict,
-              trigger_pitch: bool = False) -> tuple:
+              open_editor: bool = False) -> tuple:
     anki_ensure_deck(deck, url)
 
     fields: dict = {}
@@ -229,11 +230,6 @@ def _add_note(deck: str, model: str, fm: dict,
         fname = fm.get(role, "").strip()
         if fname and value:
             fields[fname] = value
-
-    # pitch_accent 留空讓 AJT 填（但不覆蓋已被其他 role 佔用的欄位）
-    pa = fm.get("pitch_accent", "").strip()
-    if pa and pa not in fields:
-        fields[pa] = ""
 
     note = {
         "deckName":  deck,
@@ -247,20 +243,15 @@ def _add_note(deck: str, model: str, fm: dict,
         return False, f"Anki 錯誤：{resp['error']}"
 
     note_id = resp["result"]
-    pitch_msg = ""
-    # 觸發 AJT Pitch Accent addon（guiEditNote 會觸發 editor_did_load_note hook）
-    if trigger_pitch:
+    editor_msg = ""
+    if open_editor:
         try:
-            print(f"[AJT] guiEditNote note={note_id}")
             pr = anki_req("guiEditNote", {"note": note_id}, url)
             if pr.get("error"):
-                pitch_msg = f"｜AJT 觸發失敗：{pr['error']}"
-                print(f"[AJT] error: {pr['error']}")
+                editor_msg = f"｜開啟編輯視窗失敗：{pr['error']}"
             else:
-                pitch_msg = "｜已觸發 AJT（請關閉編輯視窗）"
-                print(f"[AJT] success")
+                editor_msg = "｜已開啟編輯視窗"
         except Exception as e:
-            pitch_msg = f"｜AJT 觸發失敗：{e}"
-            print(f"[AJT] exception: {e}")
+            editor_msg = f"｜開啟編輯視窗失敗：{e}"
 
-    return True, f"✅ 已加入「{deck}」（ID: {note_id}）{pitch_msg}"
+    return True, f"✅ 已加入「{deck}」（ID: {note_id}）{editor_msg}"
