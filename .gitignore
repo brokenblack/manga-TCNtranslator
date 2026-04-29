@@ -48,3 +48,9 @@ dist/
 build/
 *.exe
 *.spec
+
+# 發布壓縮包（上傳 GitHub Releases，不入版控）
+*.zip
+*.7z
+*.sfx
+sfx/
