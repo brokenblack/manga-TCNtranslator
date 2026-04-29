@@ -1,8 +1,8 @@
-# 日韓文漫畫/遊戲即時翻譯工具
+# 日韓文即時翻譯工具
 
 Windows 桌面工具，**OCR 截圖 + AI 翻譯 + Anki 單字卡匯出**。專為玩日文／韓文遊戲與視覺小說（VN）的玩家設計。
 
-[![Latest Release](https://github.com/brokenblack/manga-TCNtranslator/releases/tag/v1.0)](https://github.com/brokenblack/manga-TCNtranslator/releases/tag/v1.0)
+[![Latest Release](https://github.com/brokenblack/manga-TCNtranslator/releases/tag/v1.0)]
 [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
 ---
