@@ -41,9 +41,7 @@ history.json
 Thumbs.db
 desktop.ini
 
-# 不推送的腳本
-build_exe.py
-install_ocr.bat
+# 打包產出
 dist/
 build/
 *.exe
