@@ -2,31 +2,32 @@
 
 Windows 桌面工具，**OCR 截圖 + AI 翻譯 + Anki 單字卡匯出**。專為玩日文／韓文遊戲與視覺小說（VN）的玩家設計。
 
-[![Latest Release](https://github.com/brokenblack/manga-TCNtranslator/releases/tag/v1.0)](https://github.com/brokenblack/manga-TCNtranslator/releases/tag/v1.0)
+[![Latest Release](https://img.shields.io/github/v/release/brokenblack/manga-TCNtranslator?label=最新版本)](https://github.com/brokenblack/manga-TCNtranslator/releases/latest)
 [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
 ---
 
 ## 下載使用（推薦）
 
-> 🎯 打包好的 Windows exe，下載解壓即可使用。
+> 🎯 打包好的 Windows exe，下載即可使用，無需安裝 Python。
 
 ➡️ **[到 Releases 頁面下載最新版](https://github.com/brokenblack/manga-TCNtranslator/releases/latest)**
 
-| 檔案 | 大小 | 說明 |
-|---|---|---|
-| `翻譯工具_v1.0.zip` | 398 MB | Windows 內建解壓即可使用 |
-| `翻譯工具_v1.0.7z` | 279 MB | 較小，需安裝 [7-Zip](https://www.7-zip.org/) |
+| 檔案 | 大小 | 啟動 | 說明 |
+|---|---|---|---|
+| [`翻譯工具.exe`](https://github.com/brokenblack/manga-TCNtranslator/releases/download/v1.0.1/翻譯工具.exe) (v1.0.1) ⭐ | 402 MB | 10-15 秒 | **單檔，分享方便**，含句子卡讀音修復 |
+| [`翻譯工具_v1.0.zip`](https://github.com/brokenblack/manga-TCNtranslator/releases/download/v1.0/翻譯工具_v1.0.zip) | 398 MB | < 2 秒 | 資料夾版，啟動快 |
+| [`翻譯工具_v1.0.7z`](https://github.com/brokenblack/manga-TCNtranslator/releases/download/v1.0/翻譯工具_v1.0.7z) | 279 MB | < 2 秒 | 同上但較小，需 [7-Zip](https://www.7-zip.org/) |
 
 ### 快速開始
 
-1. 下載 ZIP 並解壓到任意資料夾（建議桌面或 `C:\Tools`）
-2. 進入解壓後的 `翻譯工具/` 資料夾，雙擊 **`翻譯工具.exe`**
+1. 下載並解壓（單檔版直接放固定資料夾，如桌面或 `C:\Tools`）
+2. 雙擊 `翻譯工具.exe`（單檔版首次啟動需 10-15 秒，請耐心等候）
 3. 點右上角 **⚙️ 翻譯設定** → **翻譯 API** 分頁
 4. 申請並填入 [API Key] → 儲存
 5. 按 **Ctrl + Alt + Q** 框選遊戲文字 → 自動翻譯！
 
-詳細說明請見壓縮包內的 **使用說明.txt**。
+詳細說明請見 **使用說明.txt**。
 
 ---
 
